@@ -1,0 +1,3 @@
+prefect
+gitpython
+ucb_prefect_tools @ git+https://github.com/UCBoulder/oit-ds-tools-prefect
