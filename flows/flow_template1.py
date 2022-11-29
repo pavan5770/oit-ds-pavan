@@ -3,9 +3,6 @@
 # TODO: Fill in the flow name above
 
 import os
-import pandas as pd
-from datetime import datetime
-from math import ceil
 
 from prefect import task, flow
 from prefect.blocks.system import JSON
@@ -22,39 +19,7 @@ def to_csv(dataframe):
     # Try to return in-memory data: if you do have to save something to disk, return the filenames
     # This way, inputs, outputs, and functional modes are clearly visible
 
-    return dataframe.to_csv('results.csv', index=False).encode("utf-8")
-
-
-def readFlat(file):
-    """ Takes a flat file and returns a dataframe """
-
-    return pd.read_csv(file)
-
-
-def ageCalc(dob):
-    """ calculate age - takes a dataframe column as input and returns calculated age """
-
-    # today's date in a list format
-    today = datetime.now()
-    # extract the timedelta from the date
-    date1 = datetime.strptime(dob, r"%m/%d/%y")
-    # calculate days and convert them to years
-    return ceil((today - date1).days / 365)
-
-
-def rowLevelDuplications(string1):
-    """ split the string, remove the duplicate and join once again """
-
-    # split the string by semicolon
-    givenstring = string1.split(";")
-    # create an empty list
-    splitstore = []
-    # loop through the given string and add only if it is not in the splitstore
-    for item in givenstring:
-        if item not in splitstore:
-            splitstore.append(item)
-
-    return ';'.join(splitstore)
+    return dataframe.to_csv(index=False).encode("utf-8")
 
 
 # Keep the get_config task close to the flow definition for readability
@@ -94,44 +59,12 @@ def main_flow(env: str = "dev"):
     """Enter flow description here"""
 
     with util.limit_concurrency(max_tasks=10):
+
         # TODO: Fill in flow description in function docstring.
 
         config = get_config(env)
 
         # TODO: Replace statements below with your own ETL tasks and/or SQL statements
-
-        enrollments = readFlat("../test-data/enrollments.csv")
-
-        students = readFlat("../test-data/students.csv")
-
-        results = students.merge(
-            enrollments,
-            how="inner",
-            on=["term_id", "student_id"],
-        )
-
-        results = results[results['credits_earned'] > 90]
-
-        results['age'] = results['date_of_birth'].apply(ageCalc)
-
-        results[['course_subject', 'placeholder', 'course_number', 'course_section']] = results['class_id'].str.split(
-            "-", expand=True)
-
-        results.drop(['placeholder'], axis=1)
-
-        res1 = results[['student_id', 'major']].groupby(['student_id'])['major'].apply(';'.join).reset_index()
-
-        res1['academic_plans'] = res1['major'].apply(rowLevelDuplications)
-
-        res1.drop(['major'], axis=1)
-
-        results = results.merge(
-            res1,
-            how="left",
-            on=["student_id"]
-        )
-
-        results.drop(['major'], axis=1)
 
         select_sql = r"""
             SELECT TO_CHAR(emplid) AS "EMPLID"
@@ -145,8 +78,7 @@ def main_flow(env: str = "dev"):
         data = database.sql_extract.submit(
             sql_query=select_sql, connection_info=config["source_database"]
         )
-        csv_file = to_csv.submit(results)
-
+        csv_file = to_csv.submit(data)
         object_storage.put.submit(
             binary_object=csv_file,
             object_name=config["sink_filepath"],
